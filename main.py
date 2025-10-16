@@ -21,10 +21,21 @@ from src.budget import set_monthly_budget, check_budget_status
 from src.analytics import get_basic_statistics
 from src.notifications import system_alerts
 from src.logger import log_action, log_error
+from src.users import create_user, login, logout, get_current_user
+from src.charts import chart_by_category, chart_by_month
+from src.backup import create_backup
+from src.api import start_api_server, stop_api_server
+
+def _require_user():
+    user = get_current_user()
+    if not user:
+        raise RuntimeError("No has iniciado sesión. Ve al menú de usuarios.")
+    return user
 
 def menu():
     while True:
-        print("\n=== GESTOR DE GASTOS PERSONALES (Versión Avanzada) ===")
+        current = get_current_user() or "—"
+        print(f"\n=== GESTOR DE GASTOS (Usuario: {current}) ===")
         print("1. Agregar gasto")
         print("2. Listar gastos")
         print("3. Total gastado")
@@ -36,114 +47,175 @@ def menu():
         print("9. Exportar a CSV")
         print("10. Reportes avanzados")
         print("11. Conversor de moneda")
-        print("12. Presupuesto mensual")
+        print("12. Presupuesto mensual / Estado")
         print("13. Análisis estadístico")
         print("14. Alertas del sistema")
-        print("15. Salir")
+        print("15. Gráfico por categoría (ASCII)")
+        print("16. Gráfico por mes (ASCII)")
+        print("17. Backup (ZIP)")
+        print("18. API local: iniciar")
+        print("19. API local: detener")
+        print("20. Usuarios: registrar")
+        print("21. Usuarios: login")
+        print("22. Usuarios: logout")
+        print("23. Salir")
 
-        opcion = input("Seleccione una opción: ")
+        op = input("Seleccione una opción: ")
 
         try:
-            if opcion == "1":
+            if op == "1":
+                _require_user()
                 desc = input("Descripción: ")
                 cat = input("Categoría: ")
                 amt = float(input("Monto: "))
                 validate_amount(amt)
-                fecha_input = input("Fecha (YYYY-MM-DD, vacío = hoy): ") or None
-                if fecha_input:
-                    validate_date(fecha_input)
-                add_expense(desc, cat, amt, fecha_input)
-                log_action("Nuevo gasto agregado", f"{desc} - {cat} - ${amt}")
-                print("✅ Gasto agregado correctamente.")
+                fecha = input("Fecha (YYYY-MM-DD, vacío = hoy): ") or None
+                if fecha:
+                    validate_date(fecha)
+                add_expense(desc, cat, amt, fecha)
+                log_action("Nuevo gasto", f"{desc} - {cat} - ${amt}")
+                print("✅ Gasto agregado.")
 
-            elif opcion == "2":
-                expenses = list_expenses()
-                if not expenses:
-                    print("No hay gastos registrados.")
+            elif op == "2":
+                _require_user()
+                items = list_expenses()
+                if not items:
+                    print("No hay gastos.")
                 else:
-                    for i, e in enumerate(expenses):
+                    for i, e in enumerate(items):
                         print(f"{i}. {e['description']} ({e['category']}) - {e['date']}: ${e['amount']}")
 
-            elif opcion == "3":
-                total = get_total_expense()
-                print(f"💰 Total gastado: ${total}")
+            elif op == "3":
+                _require_user()
+                print(f"💰 Total: ${get_total_expense()}")
 
-            elif opcion == "4":
+            elif op == "4":
+                _require_user()
                 cat = input("Categoría: ")
                 print(f"💸 Total en {cat}: ${get_expense_by_category(cat)}")
 
-            elif opcion == "5":
-                idx = int(input("Número del gasto a editar: "))
-                new_desc = input("Nueva descripción (vacío si no cambia): ") or None
-                new_cat = input("Nueva categoría (vacío si no cambia): ") or None
-                new_amt_input = input("Nuevo monto (vacío si no cambia): ")
-                new_amt = float(new_amt_input) if new_amt_input else None
+            elif op == "5":
+                _require_user()
+                idx = int(input("Índice a editar: "))
+                new_desc = input("Nueva descripción (vacío = igual): ") or None
+                new_cat = input("Nueva categoría (vacío = igual): ") or None
+                new_amt_str = input("Nuevo monto (vacío = igual): ")
+                new_amt = float(new_amt_str) if new_amt_str else None
                 if new_amt is not None:
                     validate_amount(new_amt)
-                new_date = input("Nueva fecha (YYYY-MM-DD, vacío si no cambia): ") or None
+                new_date = input("Nueva fecha (YYYY-MM-DD, vacío = igual): ") or None
                 if new_date:
                     validate_date(new_date)
                 updated = edit_expense(idx, new_desc, new_cat, new_amt, new_date)
-                log_action("Gasto editado", f"{updated}")
-                print("✅ Gasto actualizado.")
+                log_action("Editar gasto", f"{updated}")
+                print("✅ Actualizado.")
 
-            elif opcion == "6":
-                idx = int(input("Número del gasto a eliminar: "))
+            elif op == "6":
+                _require_user()
+                idx = int(input("Índice a eliminar: "))
                 deleted = delete_expense(idx)
-                log_action("Gasto eliminado", f"{deleted}")
-                print(f"🗑️ Eliminado: {deleted}")
+                log_action("Eliminar gasto", f"{deleted}")
+                print("🗑️ Eliminado.")
 
-            elif opcion == "7":
-                date_str = input("Fecha (YYYY-MM-DD): ")
-                validate_date(date_str)
-                filtered = filter_by_date(date_str)
-                for e in filtered:
+            elif op == "7":
+                _require_user()
+                d = input("Fecha (YYYY-MM-DD): ")
+                validate_date(d)
+                for e in filter_by_date(d):
                     print(f"- {e['description']} ({e['category']}): ${e['amount']}")
 
-            elif opcion == "8":
-                month_str = input("Mes (YYYY-MM): ")
-                filtered = filter_by_month(month_str)
-                for e in filtered:
+            elif op == "8":
+                _require_user()
+                m = input("Mes (YYYY-MM): ")
+                for e in filter_by_month(m):
                     print(f"- {e['description']} ({e['category']}) - {e['date']}: ${e['amount']}")
 
-            elif opcion == "9":
-                filename = export_to_csv()
-                print(f"📁 Exportado a {filename}")
+            elif op == "9":
+                _require_user()
+                fn = export_to_csv()
+                print(f"📁 Exportado a {fn}")
 
-            elif opcion == "10":
+            elif op == "10":
+                _require_user()
                 print("\n📊 === REPORTES ===")
                 print(f"Promedio diario: ${get_average_daily_expense()}")
                 print(f"Promedio mensual: ${get_average_monthly_expense()}")
                 cat, val = get_most_expensive_category()
                 print(f"Categoría con más gasto: {cat} (${val})")
+                missing = get_days_without_expense()
+                print(f"Días sin gasto (entre min y max): {len(missing)}")
 
-            elif opcion == "11":
+            elif op == "11":
+                _require_user()
                 total = get_total_expense()
-                currency = input("Convertir a (USD/EUR/COP): ").upper()
-                converted = convert_amount(total, currency)
-                print(f"💱 Total en {currency}: {converted}")
+                curr = input("Moneda destino (USD/EUR/COP): ").upper()
+                print(f"💱 {curr}: {convert_amount(total, curr)}")
 
-            elif opcion == "12":
+            elif op == "12":
+                _require_user()
                 print("\n💼 === PRESUPUESTO ===")
-                amount = float(input("Nuevo presupuesto mensual: "))
-                validate_amount(amount)
-                data = set_monthly_budget(amount)
-                print(f"✅ Presupuesto actualizado: ${data['budget']} (desde {data['last_updated']})")
+                sub = input("[1] Establecer  [2] Ver estado: ")
+                if sub == "1":
+                    val = float(input("Nuevo presupuesto mensual: "))
+                    validate_amount(val)
+                    from src.budget import set_monthly_budget
+                    data = set_monthly_budget(val)
+                    print(f"✅ Presupuesto: ${data['budget']} (desde {data['last_updated']})")
                 print(check_budget_status())
 
-            elif opcion == "13":
-                print("\n📈 === ANÁLISIS ESTADÍSTICO ===")
+            elif op == "13":
+                _require_user()
+                print("\n📈 === ESTADÍSTICAS ===")
                 stats = get_basic_statistics()
                 for k, v in stats.items():
                     print(f"{k.capitalize()}: {v}")
 
-            elif opcion == "14":
+            elif op == "14":
+                _require_user()
                 print("\n🔔 === ALERTAS ===")
-                for alert in system_alerts():
-                    print(alert)
+                for a in system_alerts():
+                    print(a)
 
-            elif opcion == "15":
-                print("👋 Saliendo del sistema...")
+            elif op == "15":
+                _require_user()
+                chart_by_category()
+
+            elif op == "16":
+                _require_user()
+                chart_by_month()
+
+            elif op == "17":
+                # backup no requiere sesión, pero es útil tener el contexto
+                z = create_backup()
+                print(f"🧰 Backup creado: {z}")
+
+            elif op == "18":
+                msg = start_api_server()
+                print(f"🌐 {msg}")
+
+            elif op == "19":
+                msg = stop_api_server()
+                print(f"🛑 {msg}")
+
+            elif op == "20":
+                username = input("Nuevo usuario: ")
+                full = input("Nombre completo: ")
+                pwd = input("Contraseña: ")
+                u = create_user(username, full, pwd)
+                print(f"✅ Usuario creado: {u['username']}")
+
+            elif op == "21":
+                username = input("Usuario: ")
+                pwd = input("Contraseña: ")
+                who = login(username, pwd)
+                print(f"✅ Sesión iniciada como {who}")
+
+            elif op == "22":
+                logout()
+                print("✅ Sesión cerrada.")
+
+            elif op == "23":
+                print("👋 Saliendo...")
                 break
 
             else:
