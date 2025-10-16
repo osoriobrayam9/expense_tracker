@@ -1,3 +1,4 @@
+import csv
 from datetime import datetime
 from src.storage import load_data, save_data
 
@@ -66,3 +67,16 @@ def filter_by_month(month_str):
     """Filtra los gastos por mes (formato YYYY-MM)."""
     expenses = load_data()
     return [exp for exp in expenses if exp["date"].startswith(month_str)]
+
+def export_to_csv(filename="gastos.csv"):
+    """Exporta los gastos actuales a un archivo CSV."""
+    expenses = load_data()
+    if not expenses:
+        raise ValueError("No hay gastos registrados para exportar.")
+    
+    with open(filename, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=["description", "category", "amount", "date"])
+        writer.writeheader()
+        writer.writerows(expenses)
+    
+    return filename

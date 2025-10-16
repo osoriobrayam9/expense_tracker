@@ -7,6 +7,7 @@ from src.tracker import (
     delete_expense,
     filter_by_date,
     filter_by_month,
+    export_to_csv,
 )
 
 def menu():
@@ -20,7 +21,8 @@ def menu():
         print("6. Eliminar gasto")
         print("7. Filtrar por fecha")
         print("8. Filtrar por mes")
-        print("9. Salir")
+        print("9. Exportar a CSV")
+        print("10. Salir")
 
         opcion = input("Seleccione una opción: ")
 
@@ -93,6 +95,12 @@ def menu():
             else:
                 print("No se encontraron gastos en ese mes.")
         elif opcion == "9":
+            try:
+                filename = export_to_csv()
+                print(f"📁 Archivo CSV exportado correctamente: {filename}")
+            except ValueError as e:
+                print(f"⚠️ {e}")
+        elif opcion == "10":
             print("👋 Saliendo del programa...")
             break
         else:
