@@ -17,12 +17,16 @@ from src.report import (
     get_days_without_expense,
 )
 from src.currency import convert_amount
+from src.budget import set_monthly_budget, check_budget_status
+from src.analytics import get_basic_statistics
+from src.notifications import system_alerts
+from src.logger import log_action, log_error
 
 def menu():
     while True:
-        print("\n=== GESTOR DE GASTOS PERSONALES ===")
+        print("\n=== GESTOR DE GASTOS PERSONALES (Versión Avanzada) ===")
         print("1. Agregar gasto")
-        print("2. Listar todos los gastos")
+        print("2. Listar gastos")
         print("3. Total gastado")
         print("4. Gasto por categoría")
         print("5. Editar gasto")
@@ -32,7 +36,10 @@ def menu():
         print("9. Exportar a CSV")
         print("10. Reportes avanzados")
         print("11. Conversor de moneda")
-        print("12. Salir")
+        print("12. Presupuesto mensual")
+        print("13. Análisis estadístico")
+        print("14. Alertas del sistema")
+        print("15. Salir")
 
         opcion = input("Seleccione una opción: ")
 
@@ -46,7 +53,9 @@ def menu():
                 if fecha_input:
                     validate_date(fecha_input)
                 add_expense(desc, cat, amt, fecha_input)
+                log_action("Nuevo gasto agregado", f"{desc} - {cat} - ${amt}")
                 print("✅ Gasto agregado correctamente.")
+
             elif opcion == "2":
                 expenses = list_expenses()
                 if not expenses:
@@ -54,84 +63,94 @@ def menu():
                 else:
                     for i, e in enumerate(expenses):
                         print(f"{i}. {e['description']} ({e['category']}) - {e['date']}: ${e['amount']}")
+
             elif opcion == "3":
-                print(f"💰 Total gastado: ${get_total_expense()}")
+                total = get_total_expense()
+                print(f"💰 Total gastado: ${total}")
+
             elif opcion == "4":
                 cat = input("Categoría: ")
                 print(f"💸 Total en {cat}: ${get_expense_by_category(cat)}")
+
             elif opcion == "5":
-                expenses = list_expenses()
-                if not expenses:
-                    print("No hay gastos para editar.")
-                else:
-                    for i, e in enumerate(expenses):
-                        print(f"{i}. {e['description']} ({e['category']}) - {e['date']}: ${e['amount']}")
-                    idx = int(input("Número del gasto a editar: "))
-                    new_desc = input("Nueva descripción (vacío si no cambia): ") or None
-                    new_cat = input("Nueva categoría (vacío si no cambia): ") or None
-                    new_amt_input = input("Nuevo monto (vacío si no cambia): ")
-                    new_amt = float(new_amt_input) if new_amt_input else None
-                    if new_amt is not None:
-                        validate_amount(new_amt)
-                    new_date = input("Nueva fecha (YYYY-MM-DD, vacío si no cambia): ") or None
-                    if new_date:
-                        validate_date(new_date)
-                    updated = edit_expense(idx, new_desc, new_cat, new_amt, new_date)
-                    print(f"✅ Gasto actualizado: {updated}")
+                idx = int(input("Número del gasto a editar: "))
+                new_desc = input("Nueva descripción (vacío si no cambia): ") or None
+                new_cat = input("Nueva categoría (vacío si no cambia): ") or None
+                new_amt_input = input("Nuevo monto (vacío si no cambia): ")
+                new_amt = float(new_amt_input) if new_amt_input else None
+                if new_amt is not None:
+                    validate_amount(new_amt)
+                new_date = input("Nueva fecha (YYYY-MM-DD, vacío si no cambia): ") or None
+                if new_date:
+                    validate_date(new_date)
+                updated = edit_expense(idx, new_desc, new_cat, new_amt, new_date)
+                log_action("Gasto editado", f"{updated}")
+                print("✅ Gasto actualizado.")
+
             elif opcion == "6":
-                expenses = list_expenses()
-                if not expenses:
-                    print("No hay gastos para eliminar.")
-                else:
-                    for i, e in enumerate(expenses):
-                        print(f"{i}. {e['description']} ({e['category']}) - {e['date']}: ${e['amount']}")
-                    idx = int(input("Número del gasto a eliminar: "))
-                    deleted = delete_expense(idx)
-                    print(f"🗑️ Gasto eliminado: {deleted}")
+                idx = int(input("Número del gasto a eliminar: "))
+                deleted = delete_expense(idx)
+                log_action("Gasto eliminado", f"{deleted}")
+                print(f"🗑️ Eliminado: {deleted}")
+
             elif opcion == "7":
                 date_str = input("Fecha (YYYY-MM-DD): ")
                 validate_date(date_str)
                 filtered = filter_by_date(date_str)
-                if filtered:
-                    print(f"\n📅 Gastos del {date_str}:")
-                    for e in filtered:
-                        print(f"- {e['description']} ({e['category']}): ${e['amount']}")
-                else:
-                    print("No se encontraron gastos en esa fecha.")
+                for e in filtered:
+                    print(f"- {e['description']} ({e['category']}): ${e['amount']}")
+
             elif opcion == "8":
                 month_str = input("Mes (YYYY-MM): ")
                 filtered = filter_by_month(month_str)
-                if filtered:
-                    print(f"\n📆 Gastos del mes {month_str}:")
-                    for e in filtered:
-                        print(f"- {e['description']} ({e['category']}) - {e['date']}: ${e['amount']}")
-                else:
-                    print("No se encontraron gastos en ese mes.")
+                for e in filtered:
+                    print(f"- {e['description']} ({e['category']}) - {e['date']}: ${e['amount']}")
+
             elif opcion == "9":
                 filename = export_to_csv()
                 print(f"📁 Exportado a {filename}")
+
             elif opcion == "10":
-                print("\n📊 === REPORTES AVANZADOS ===")
+                print("\n📊 === REPORTES ===")
                 print(f"Promedio diario: ${get_average_daily_expense()}")
                 print(f"Promedio mensual: ${get_average_monthly_expense()}")
                 cat, val = get_most_expensive_category()
                 print(f"Categoría con más gasto: {cat} (${val})")
-                missing = get_days_without_expense()
-                if missing:
-                    print(f"Días sin gasto registrados ({len(missing)}): {', '.join(missing[:5])} ...")
-                else:
-                    print("No hay días sin gastos entre las fechas registradas.")
+
             elif opcion == "11":
-                total_cop = get_total_expense()
+                total = get_total_expense()
                 currency = input("Convertir a (USD/EUR/COP): ").upper()
-                converted = convert_amount(total_cop, currency)
+                converted = convert_amount(total, currency)
                 print(f"💱 Total en {currency}: {converted}")
+
             elif opcion == "12":
-                print("👋 Saliendo del programa...")
+                print("\n💼 === PRESUPUESTO ===")
+                amount = float(input("Nuevo presupuesto mensual: "))
+                validate_amount(amount)
+                data = set_monthly_budget(amount)
+                print(f"✅ Presupuesto actualizado: ${data['budget']} (desde {data['last_updated']})")
+                print(check_budget_status())
+
+            elif opcion == "13":
+                print("\n📈 === ANÁLISIS ESTADÍSTICO ===")
+                stats = get_basic_statistics()
+                for k, v in stats.items():
+                    print(f"{k.capitalize()}: {v}")
+
+            elif opcion == "14":
+                print("\n🔔 === ALERTAS ===")
+                for alert in system_alerts():
+                    print(alert)
+
+            elif opcion == "15":
+                print("👋 Saliendo del sistema...")
                 break
+
             else:
-                print("❌ Opción inválida. Intente nuevamente.")
+                print("❌ Opción inválida.")
+
         except Exception as e:
+            log_error(str(e))
             print(f"⚠️ Error: {e}")
 
 if __name__ == "__main__":
